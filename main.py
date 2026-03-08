@@ -157,8 +157,8 @@ def _process_pdf_gemini(tmp_path):
     - Ensure EVERY single question in the document is extracted.
     '''
     
-    print("Generating question data with Gemini-2.0-flash...")
-    model = genai.GenerativeModel(model_name='gemini-2.0-flash')
+    print("Generating question data with Gemini-flash-latest...")
+    model = genai.GenerativeModel(model_name='gemini-flash-latest')
     
     try:
         response = model.generate_content([sample_file, prompt])
