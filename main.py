@@ -26,9 +26,12 @@ def run_extraction(cloud_event, *args):
     GCS trigger entry point.
     Fires on 'google.cloud.storage.object.v1.finalized' event.
     """
-    data        = cloud_event.data
-    bucket_name = data["bucket"]
-    file_name   = data["name"]
+    data = cloud_event.data
+    if isinstance(data, bytes):
+        data = json.loads(data)
+
+    bucket_name = data.get("bucket", "")
+    file_name   = data.get("name", "")
 
     # Check extension
     is_pdf = file_name.lower().endswith(".pdf")
