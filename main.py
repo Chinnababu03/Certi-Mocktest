@@ -26,14 +26,18 @@ if MONGO_URI:
 if GEMINI_KEY:
     genai.configure(api_key=GEMINI_KEY)
 
-def run_extraction(cloud_event, *args):
+def run_extraction(event_payload, context=None):
     """
     GCS trigger entry point.
     Fires on 'google.cloud.storage.object.v1.finalized' event.
     """
-    data = cloud_event.data
-    if isinstance(data, bytes):
-        data = json.loads(data)
+    # Functions Framework sometimes passes a raw dict (legacy) or a CloudEvent object
+    if isinstance(event_payload, dict):
+        data = event_payload
+    else:
+        data = event_payload.data
+        if isinstance(data, bytes):
+            data = json.loads(data)
 
     bucket_name = data.get("bucket", "")
     file_name   = data.get("name", "")
