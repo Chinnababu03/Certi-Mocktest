@@ -18,6 +18,11 @@ DB_NAME     = os.environ.get("DB_NAME", "QuizApp")
 COLLECTION  = os.environ.get("QUESTIONS_COLLECTION", "questions")
 GEMINI_KEY  = os.environ.get("GEMINI_API_KEY", "")
 
+# Global client for warm-start reuse
+mongo_client = None
+if MONGO_URI:
+    mongo_client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=30_000, tls=True)
+
 if GEMINI_KEY:
     genai.configure(api_key=GEMINI_KEY)
 
@@ -174,12 +179,12 @@ def _process_pdf_gemini(tmp_path):
         
         
 def _store(questions: list) -> int:
-    if not MONGO_URI:
-        print("❌ MONGO_URI environment variable is not set!")
+    global mongo_client
+    if not MONGO_URI or not mongo_client:
+        print("❌ MONGO_URI environment variable is not set or client failed to initialize!")
         return 0
         
-    client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=30_000, tls=True)
-    col    = client[DB_NAME][COLLECTION]
+    col = mongo_client[DB_NAME][COLLECTION]
     
     # We will simply append these questions to the database for this project iteration
     # rather than wiping the DB completely like the original script did, 
