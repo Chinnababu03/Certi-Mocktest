@@ -10,7 +10,7 @@ __pycache__/
 # Env / secrets
 .env
 
-# PDF files (too large for git)
+# PDF files
 *.pdf
 
 # Temp / debug scripts
@@ -29,6 +29,12 @@ build/
 # GCP / Firebase
 .gcloudignore
 .firebaserc
+firebase.json
 
 # Node
 node_modules/
+
+# Ignore everything else on master
+*
+!README.md
+!.gitignore
