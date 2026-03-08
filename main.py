@@ -158,7 +158,7 @@ def _process_pdf_gemini(tmp_path):
     '''
     
     print("Generating question data with Gemini-1.5-pro...")
-    model = genai.GenerativeModel(model_name='gemini-1.5-pro-latest')
+    model = genai.GenerativeModel(model_name='gemini-1.5-pro')
     
     try:
         response = model.generate_content([sample_file, prompt])
