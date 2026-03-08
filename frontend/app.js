@@ -3,7 +3,7 @@
  * Communicates with FastAPI backend at /api/*
  */
 
-const API = '';  // Same origin (FastAPI serves frontend). For dev: 'http://localhost:8000'
+const API = 'https://certiq-api-502816012135.asia-south1.run.app';  // Cloud Run API
 
 // ── State ──────────────────────────────────────────────────────
 const state = {
@@ -60,7 +60,7 @@ async function loadStats() {
   try {
     const res = await fetch(`${API}/api/health`);
     const data = await res.json();
-    animateNumber('stat-total', data.questions || 0);
+    animateNumber('stat-total', data.total_questions || 0);
     document.getElementById('stat-taken').textContent = state.totalQuizzesTaken;
   } catch {
     document.getElementById('stat-total').textContent = '–';
@@ -96,7 +96,7 @@ function renderCategoryGrid() {
   const grid = document.getElementById('category-grid');
   if (!state.categories.length) { grid.innerHTML = ''; return; }
 
-  const colors = ['#6366f1','#8b5cf6','#22d3a5','#f59e0b','#ef4444','#06b6d4','#ec4899','#10b981'];
+  const colors = ['#6366f1', '#8b5cf6', '#22d3a5', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#10b981'];
   grid.innerHTML = state.categories.map((cat, i) => `
     <div class="category-chip" onclick="quickStartByTopic('${escHtml(cat.topic)}')">
       <div class="cc-dot" style="background:${colors[i % colors.length]}"></div>
@@ -121,7 +121,9 @@ async function startQuiz() {
   btn.disabled = true; btn.querySelector('span').textContent = 'Loading…';
 
   try {
+    const cert = document.getElementById('cert-select').value;
     let url = `${API}/api/quiz?count=${count}`;
+    if (cert) url += `&cert=${encodeURIComponent(cert)}`;
     if (topic) url += `&topic=${encodeURIComponent(topic)}`;
 
     const res = await fetch(url);
@@ -131,9 +133,11 @@ async function startQuiz() {
     state.questions = data.questions;
     state.sessionId = data.session_id;
     state.currentIndex = 0;
+    state.visited = new Set([0]);
     state.userAnswers = {};
     state.revealedAnswers = {};
-    state.elapsedSeconds = 0;
+    // GCP averages ~144 seconds per question
+    state.timeLeft = count * 144;
     state.quizFinished = false;
 
     showScreen('quiz');
@@ -170,12 +174,25 @@ function renderQuestion() {
   setTimeout(() => questionCard.classList.remove('animating'), 350);
   questionText.textContent = q.question;
 
+  state.visited.add(idx); // Mark visited
+
+  // Detect "Choose two", "Select 3", "Choose three", etc.
+  let mCount = 1;
+  const match = /(?:choose|select) (two|three|four|2|3|4)/i.exec(q.question);
+  if (match) {
+    const val = match[1].toLowerCase();
+    if (val === 'two' || val === '2') mCount = 2;
+    else if (val === 'three' || val === '3') mCount = 3;
+    else if (val === 'four' || val === '4') mCount = 4;
+  }
+  state.multiCount = mCount;
+
   // Options
   const grid = document.getElementById('options-grid');
   grid.innerHTML = '';
 
   const revealed = state.revealedAnswers[q._id];
-  const userChoice = state.userAnswers[q._id];
+  const ansArr = state.userAnswers[q._id] || [];
 
   // Feedback chip
   if (revealed) {
@@ -195,14 +212,14 @@ function renderQuestion() {
 
     if (revealed) {
       btn.disabled = true;
-      if (key === revealed.correct) btn.classList.add('correct');
-      else if (key === userChoice && !revealed.isCorrect) btn.classList.add('wrong');
-    } else if (userChoice === key) {
+      if (revealed.correct.includes(key)) btn.classList.add('correct');
+      else if (ansArr.includes(key) && !revealed.correct.includes(key)) btn.classList.add('wrong');
+    } else if (ansArr.includes(key)) {
       btn.classList.add('selected');
     }
 
     if (!revealed) {
-      btn.onclick = () => selectOption(q._id, key, q.options);
+      btn.onclick = () => selectOption(q._id, key);
     }
 
     grid.appendChild(btn);
@@ -232,18 +249,40 @@ function renderDots() {
     if (i === state.currentIndex) cls += ' current';
     else if (state.revealedAnswers[q._id]) {
       cls += state.revealedAnswers[q._id].isCorrect ? ' correct-dot' : ' wrong-dot';
-    } else if (state.userAnswers[q._id]) cls += ' answered';
-    return `<div class="${cls}" onclick="goToQuestion(${i})" title="Q${i+1}"></div>`;
+    } else if (state.userAnswers[q._id] && state.userAnswers[q._id].length > 0) {
+      cls += ' answered';
+    } else if (state.visited.has(i)) {
+      cls += ' visited';
+    }
+    return `<div class="${cls}" onclick="goToQuestion(${i})" title="Q${i + 1}">${i + 1}</div>`;
   }).join('');
 }
 
-function selectOption(questionId, key, options) {
-  state.userAnswers[questionId] = key;
+function selectOption(questionId, key) {
+  let arr = state.userAnswers[questionId] || [];
+  if (arr.includes(key)) {
+    arr = arr.filter(k => k !== key); // toggle off
+  } else {
+    if (arr.length < (state.multiCount || 1)) {
+      arr.push(key);
+    } else {
+      arr.shift();
+      arr.push(key); // keep array at max allowed length
+    }
+  }
+  state.userAnswers[questionId] = arr;
 
   // Visual feedback immediately
-  document.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
-  const btn = document.getElementById(`opt-${key}`);
-  if (btn) btn.classList.add('selected');
+  document.querySelectorAll('.option-btn').forEach(b => {
+    const k = b.id.replace('opt-', '');
+    if (arr.includes(k)) b.classList.add('selected');
+    else b.classList.remove('selected');
+  });
+
+  // If this is the last question, show the submit button if answered
+  if (state.currentIndex === state.questions.length - 1) {
+    document.getElementById('btn-submit').style.display = arr.length > 0 ? 'flex' : 'none';
+  }
 
   renderDots();
 }
@@ -268,24 +307,25 @@ function prevQuestion() {
 }
 
 // ── Submit Quiz ────────────────────────────────────────────────
-async function submitQuiz() {
-  const unanswered = state.questions.filter(q => !state.userAnswers[q._id]);
-  if (unanswered.length > 0) {
+async function submitQuiz(autoSubmit = false) {
+  const unanswered = state.questions.filter(q => !state.userAnswers[q._id] || state.userAnswers[q._id].length === 0);
+  if (!autoSubmit && unanswered.length > 0) {
     const proceed = confirm(`You have ${unanswered.length} unanswered question(s). Submit anyway?`);
     if (!proceed) return;
   }
 
   stopTimer();
-  const timeTaken = formatTime(state.elapsedSeconds);
+  const timeTakenSecs = (state.questions.length * 144) - state.timeLeft;
+  const timeTaken = formatTime(timeTakenSecs);
 
-  const answers = Object.entries(state.userAnswers).map(([qid, sel]) => ({
+  const answers = Object.entries(state.userAnswers).map(([qid, arr]) => ({
     question_id: qid,
-    selected_answer: sel
+    selected_answer: arr.join(',')
   }));
 
   // Also include unanswered as empty
   state.questions.forEach(q => {
-    if (!state.userAnswers[q._id]) {
+    if (!state.userAnswers[q._id] || state.userAnswers[q._id].length === 0) {
       answers.push({ question_id: q._id, selected_answer: '' });
     }
   });
@@ -335,6 +375,11 @@ function showResults(result, timeTaken) {
   document.getElementById('score-pct').textContent = `${percentage}%`;
   document.getElementById('res-correct').textContent = score;
   document.getElementById('res-wrong').textContent = total - score;
+
+  // Calculate physically answered files (array length > 0)
+  const answeredCount = Object.values(state.userAnswers).filter(arr => Array.isArray(arr) && arr.length > 0).length;
+  document.getElementById('res-answered').textContent = answeredCount;
+
   document.getElementById('res-total').textContent = total;
   document.getElementById('res-time').textContent = timeTaken;
 
@@ -350,7 +395,7 @@ function showResults(result, timeTaken) {
   list.innerHTML = details.map((d, i) => `
     <div class="breakdown-item ${d.is_correct ? 'correct-item' : 'wrong-item'}">
       <div class="bi-header">
-        <p class="bi-q"><strong>Q${i+1}.</strong> ${escHtml(d.question)}</p>
+        <p class="bi-q"><strong>Q${i + 1}.</strong> ${escHtml(d.question)}</p>
         <span class="bi-badge ${d.is_correct ? 'c' : 'w'}">${d.is_correct ? '✓ Correct' : '✗ Wrong'}</span>
       </div>
       <div class="bi-answers">
@@ -369,11 +414,15 @@ function showResults(result, timeTaken) {
 // ══════════════════════════════════════════════════════════════
 function startTimer() {
   stopTimer();
-  state.elapsedSeconds = 0;
   updateTimerDisplay();
   state.timerInterval = setInterval(() => {
-    state.elapsedSeconds++;
+    state.timeLeft--;
     updateTimerDisplay();
+    if (state.timeLeft <= 0) {
+      stopTimer();
+      showToast("Time's up! Auto-submitting...");
+      submitQuiz(true);
+    }
   }, 1000);
 }
 
@@ -385,13 +434,15 @@ function stopTimer() {
 }
 
 function updateTimerDisplay() {
-  document.getElementById('timer').textContent = formatTime(state.elapsedSeconds);
+  document.getElementById('timer').textContent = formatTime(state.timeLeft);
 }
 
 function formatTime(secs) {
-  const m = String(Math.floor(secs / 60)).padStart(2, '0');
+  if (secs < 0) secs = 0;
+  const h = Math.floor(secs / 3600);
+  const m = String(Math.floor((secs % 3600) / 60)).padStart(2, '0');
   const s = String(secs % 60).padStart(2, '0');
-  return `${m}:${s}`;
+  return h > 0 ? `${h}:${m}:${s}` : `${m}:${s}`;
 }
 
 // ══════════════════════════════════════════════════════════════

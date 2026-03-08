@@ -1,15 +1,19 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="CertIQ – A professional-grade quiz app for Google Professional Data Engineer certification prep, powered by AI-extracted questions." />
-  <title>CertIQ – Professional Data Engineer Quiz</title>
+  <meta name="description"
+    content="CertiMock – A modern, AI-powered mock exam platform to practice and pass your next certification." />
+  <title>CertiMock – Professional Exam Simulator</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
+    rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
+
 <body>
 
   <!-- ── Animated Background ─────────────────────────────────── -->
@@ -27,26 +31,28 @@
       <div class="logo-section">
         <div class="logo-badge">
           <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
-            <path d="M18 3L33 12V24L18 33L3 24V12L18 3Z" fill="url(#grad1)" opacity="0.9"/>
-            <text x="18" y="23" text-anchor="middle" fill="white" font-size="14" font-weight="bold" font-family="Inter">IQ</text>
+            <rect width="36" height="36" rx="10" fill="url(#grad1)" opacity="0.9" />
+            <path d="M11 18L16 23L26 13" stroke="white" stroke-width="3" stroke-linecap="round"
+              stroke-linejoin="round" />
             <defs>
-              <linearGradient id="grad1" x1="3" y1="3" x2="33" y2="33" gradientUnits="userSpaceOnUse">
-                <stop offset="0%" stop-color="#6366f1"/>
-                <stop offset="100%" stop-color="#8b5cf6"/>
+              <linearGradient id="grad1" x1="0" y1="0" x2="36" y2="36" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stop-color="#6366f1" />
+                <stop offset="100%" stop-color="#8b5cf6" />
               </linearGradient>
             </defs>
           </svg>
         </div>
         <div>
-          <h1 class="brand">CertIQ</h1>
-          <p class="brand-sub">Professional Data Engineer</p>
+          <h1 class="brand">CertiMock</h1>
+          <p class="brand-sub">Professional Exam Simulator</p>
         </div>
       </div>
 
       <div class="hero-card glass-card">
         <div class="hero-text">
-          <h2>Master Your Certification</h2>
-          <p>Practice with real exam-style questions extracted from official study materials. Track your progress and ace the GCP Professional Data Engineer exam.</p>
+          <h2>Pass Your Next Certification</h2>
+          <p>Practice with real exam-style questions before the big day. Identify your weak spots, track your mastery
+            across topics, and build confidence.</p>
         </div>
         <div class="stats-row" id="stats-row">
           <div class="stat-pill">
@@ -67,6 +73,19 @@
       <!-- Quiz Config -->
       <div class="config-card glass-card">
         <h3>Configure Your Quiz</h3>
+
+        <div class="config-row" style="margin-bottom: 16px;">
+          <div class="config-field" style="flex: 1;">
+            <label for="cert-select">Certification</label>
+            <select id="cert-select">
+              <option value="gcp-pde">GCP Professional Data Engineer</option>
+              <option value="gcp-pca">GCP Professional Cloud Architect</option>
+              <option value="gcp-pcd">GCP Professional Cloud DevOps Engineer</option>
+              <option value="gcp-pse">GCP Professional Cloud Security Engineer</option>
+            </select>
+          </div>
+        </div>
+
         <div class="config-row">
           <div class="config-field">
             <label for="quiz-count">Questions</label>
@@ -85,7 +104,7 @@
         <button class="btn-primary" id="btn-start" onclick="startQuiz()">
           <span>Start Quiz</span>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <path d="M5 12h14M12 5l7 7-7 7"/>
+            <path d="M5 12h14M12 5l7 7-7 7" />
           </svg>
         </button>
       </div>
@@ -107,66 +126,80 @@
   <!--  SCREEN 2 – QUIZ                                           -->
   <!-- ══════════════════════════════════════════════════════════ -->
   <div id="screen-quiz" class="screen">
-    <div class="quiz-container">
-      <!-- Header -->
-      <div class="quiz-header">
-        <button class="btn-ghost" onclick="confirmExit()">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <path d="M19 12H5M12 19l-7-7 7-7"/>
-          </svg>
-          Exit
-        </button>
-        <div class="quiz-meta">
-          <span id="q-counter" class="q-counter">1 / 10</span>
-          <div class="timer-badge" id="timer-badge">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+    <div class="quiz-layout">
+      <!-- Sidebar Navigation -->
+      <aside class="quiz-sidebar glass-card">
+        <h3>Questions</h3>
+        <div class="dot-nav" id="dot-nav"></div>
+      </aside>
+
+      <div class="quiz-container">
+        <!-- Header -->
+        <div class="quiz-header">
+          <button class="btn-ghost" onclick="confirmExit()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M19 12H5M12 19l-7-7 7-7" />
             </svg>
-            <span id="timer">00:00</span>
+            Exit
+          </button>
+          <div class="quiz-meta">
+            <span id="q-counter" class="q-counter">1 / 10</span>
+            <div class="timer-badge" id="timer-badge">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 6v6l4 2" />
+              </svg>
+              <span id="timer">00:00</span>
+            </div>
+          </div>
+          <div class="score-live">
+            <span id="live-score">0</span><span class="score-sep">/</span><span id="live-max">0</span>
           </div>
         </div>
-        <div class="score-live">
-          <span id="live-score">0</span><span class="score-sep">/</span><span id="live-max">0</span>
+
+        <!-- Progress Bar -->
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill" id="progress-bar"></div>
         </div>
-      </div>
 
-      <!-- Progress Bar -->
-      <div class="progress-bar-track">
-        <div class="progress-bar-fill" id="progress-bar"></div>
-      </div>
+        <!-- Topic Tag -->
+        <div class="topic-tag-wrap">
+          <span class="topic-tag" id="q-topic">General</span>
+        </div>
 
-      <!-- Topic Tag -->
-      <div class="topic-tag-wrap">
-        <span class="topic-tag" id="q-topic">General</span>
-      </div>
+        <!-- Question Card -->
+        <div class="question-card glass-card" id="question-card">
+          <p class="question-text" id="question-text">Loading...</p>
+        </div>
 
-      <!-- Question Card -->
-      <div class="question-card glass-card" id="question-card">
-        <p class="question-text" id="question-text">Loading...</p>
-      </div>
+        <!-- Options -->
+        <div class="options-grid" id="options-grid"></div>
 
-      <!-- Options -->
-      <div class="options-grid" id="options-grid"></div>
+        <!-- Navigation -->
+        <div class="nav-row">
+          <button class="btn-ghost" id="btn-prev" onclick="prevQuestion()" disabled>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
+            Prev
+          </button>
+          <button class="btn-secondary" id="btn-next" onclick="nextQuestion()">
+            Next
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M5 12h14M12 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
 
-      <!-- Navigation -->
-      <div class="nav-row">
-        <button class="btn-ghost" id="btn-prev" onclick="prevQuestion()" disabled>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-          Prev
-        </button>
-        <div class="dot-nav" id="dot-nav"></div>
-        <button class="btn-secondary" id="btn-next" onclick="nextQuestion()">
-          Next
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-        </button>
-      </div>
-
-      <!-- Submit -->
-      <div class="submit-row">
-        <button class="btn-primary" id="btn-submit" onclick="submitQuiz()" style="display:none;">
-          Submit Quiz
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-        </button>
+        <!-- Submit -->
+        <div class="submit-row">
+          <button class="btn-primary" id="btn-submit" onclick="submitQuiz()" style="display:none;">
+            Submit Quiz
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -187,7 +220,7 @@
         <div class="score-ring-wrap">
           <svg class="score-ring" viewBox="0 0 120 120" width="140" height="140">
             <circle class="ring-bg" cx="60" cy="60" r="50" />
-            <circle class="ring-fill" cx="60" cy="60" r="50" id="score-ring-fill"/>
+            <circle class="ring-fill" cx="60" cy="60" r="50" id="score-ring-fill" />
           </svg>
           <div class="score-center">
             <span class="score-pct" id="score-pct">0%</span>
@@ -203,13 +236,20 @@
             <span class="ss-num" id="res-wrong">0</span>
             <span class="ss-label">Incorrect</span>
           </div>
+          <div class="score-stat answered-stat">
+            <span class="ss-num" id="res-answered">0</span>
+            <span class="ss-label">Answered</span>
+          </div>
           <div class="score-stat total">
             <span class="ss-num" id="res-total">0</span>
             <span class="ss-label">Total</span>
           </div>
         </div>
         <div class="time-taken">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 6v6l4 2" />
+          </svg>
           Time: <strong id="res-time">–</strong>
         </div>
       </div>
@@ -223,12 +263,18 @@
       <!-- Actions -->
       <div class="result-actions">
         <button class="btn-ghost" onclick="showHome()">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12L12 3l9 9"/><path d="M9 21V9h6v12"/></svg>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M3 12L12 3l9 9" />
+            <path d="M9 21V9h6v12" />
+          </svg>
           Home
         </button>
         <button class="btn-primary" onclick="startQuiz()">
           Try Again
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15"/></svg>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M1 4v6h6M23 20v-6h-6" />
+            <path d="M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15" />
+          </svg>
         </button>
       </div>
     </div>
@@ -251,4 +297,5 @@
 
   <script src="app.js"></script>
 </body>
+
 </html>
