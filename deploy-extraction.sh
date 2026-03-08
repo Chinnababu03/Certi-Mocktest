@@ -41,7 +41,8 @@ gcloud functions deploy $FUNCTION_NAME \
   --trigger-event-filters="bucket=$BUCKET" \
   --memory=512MB \
   --timeout=300s \
-  --set-env-vars="MONGO_URI=${MONGO_URI},DB_NAME=QuizApp,QUESTIONS_COLLECTION=questions" \
+  --set-env-vars="DB_NAME=QuizApp,QUESTIONS_COLLECTION=questions" \
+  --set-secrets="MONGO_URI=QUIZAPP_MONGO_URI:latest,GEMINI_API_KEY=GEMINI_API_KEY:latest" \
   --project=$PROJECT_ID
 
 echo ""
