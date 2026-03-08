@@ -157,7 +157,16 @@ def _process_pdf_gemini(tmp_path):
     - Ensure EVERY single question in the document is extracted.
     '''
     
-    print("Generating question data with Gemini-1.5-flash...")
+    print("Generating question data with Gemini...")
+    
+    # Debug: List available models
+    try:
+        print("Listing available models for this API key:")
+        for m in genai.list_models():
+            print(f" - {m.name}")
+    except Exception as e:
+        print(f"⚠️ Could not list models: {e}")
+
     model = genai.GenerativeModel(model_name='gemini-1.5-flash')
     
     try:
