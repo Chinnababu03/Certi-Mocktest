@@ -1,4 +1,4 @@
-# CertIQ Quiz App
+# Certi Mock App
 
 A professional-grade quiz application designed for Google Cloud Professional Data Engineer certification preparation. This application uses a multi-tier serverless architecture on Google Cloud Platform (GCP) and features a premium dark glassmorphism UI.
 
