@@ -190,5 +190,6 @@ def get_result(session_id: str):
     return doc
 
 
-# ── Serve Frontend ─────────────────────────────────────────────
-app.mount("/", StaticFiles(directory="frontend", html=True), name="static")
+@app.get("/", tags=["Meta"])
+def read_root():
+    return {"status": "CertIQ API is running. Access endpoints via /api"}
