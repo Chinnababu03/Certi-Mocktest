@@ -93,40 +93,40 @@ def _process_csv(file_path):
     return questions
 
 
+from pypdf import PdfReader, PdfWriter
+import tempfile
+import time
+
 def _process_pdf_gemini(file_path):
     if not GEMINI_KEY:
         print("❌ GEMINI_API_KEY environment variable is not set! Check your .env file.")
         return []
 
-    print("Uploading PDF to Gemini AI...")
-    try:
-        sample_file = genai.upload_file(path=file_path, mime_type="application/pdf")
-    except Exception as e:
-        print(f"❌ Failed to upload PDF to Gemini: {e}")
-        return []
+    print("Reading PDF pages...")
+    reader = PdfReader(file_path)
+    total_pages = len(reader.pages)
+    chunk_size = 3  # Reduced to 3 pages to guarantee small JSON payloads
     
+    all_questions = []
+
     prompt = '''
     You are an expert IT certification parsing system. 
-    Analyze the attached certification exam PDF. Extract ALL questions from it into a strictly formatted JSON array.
+    Analyze the attached certification exam PDF segment. Extract ALL questions from it into a strictly formatted JSON array.
     
     For EVERY multiple-choice question, you must extract:
     1. "number": The integer question number.
     2. "question": The question text.
     3. "options": A dictionary of options with keys "A", "B", "C", "D", etc.
-    4. "correct_ans": THIS IS CRITICAL. If it is a single-select question, return a single string like "B". If the question explicitly says "Choose two" or "Choose three", and multiple answers are correct, you MUST return an array of strings like ["B", "C", "D"]. DO NOT truncate multiple answers to a single letter.
+    4. "correct_ans": If it is a single-select question, return a single string like "B". If the question explicitly says "Choose two" or "Choose three", you MUST return an array of strings like ["B", "C", "D"].
     5. "explanation": The explanation text if provided.
-    6. "topic": Consolidate the question topic into a consistent single phrase (e.g., "Networking", "IAM", "BigQuery", "Machine Learning", "Databases").
-    7. "certification_name": Deduce a short, slug-style certification exam name from the document (e.g., "gcp-pde" for Professional Data Engineer, "gcp-pca" for Professional Cloud Architect) and apply it to ALL questions.
+    6. "topic": Consolidate the question topic into a consistent single phrase (e.g., "Networking", "IAM", "BigQuery").
+    7. "certification_name": Deduce a short, slug-style certification exam name from the document (e.g., "gcp-pde").
 
     CRITICAL RULES:
-    - ONLY output valid JSON array syntax.
-    - Start immediately with [ and end with ]. 
+    - ONLY output valid JSON array syntax. Start immediately with [ and end with ]. 
     - DO NOT use markdown format blocks like ```json.
-    - DO NOT include any plain text explanation.
-    - Ensure EVERY single question in the document is extracted.
+    - MAKE SURE the JSON is perfectly valid and the array is properly closed (`]`) at the end, do not truncate the string midway.
     '''
-    
-    print("Generating question data with Gemini-flash-latest...")
     
     generation_config = {
         "max_output_tokens": 8192,
@@ -137,26 +137,67 @@ def _process_pdf_gemini(file_path):
         model_name='gemini-flash-latest',
         generation_config=generation_config
     )
-    
-    try:
-        response = model.generate_content([sample_file, prompt])
-        raw_json = response.text.strip()
+
+    for i in range(0, total_pages, chunk_size):
+        start_page = i
+        end_page = min(i + chunk_size, total_pages)
+        print(f"\nProcessing pages {start_page + 1} to {end_page} of {total_pages}...")
         
-        if raw_json.startswith("```json"):
-            raw_json = raw_json[7:]
-        if raw_json.endswith("```"):
-            raw_json = raw_json[:-3]
-        raw_json = raw_json.strip()
-        
-        questions = json.loads(raw_json)
-        return questions
-    except json.JSONDecodeError as de:
-        print(f"❌ Failed to parse JSON from Gemini response: {de}")
-        print(raw_json[:500] + "...") 
-        return []
-    except Exception as e:
-        print(f"❌ Error communicating with Gemini: {e}")
-        return []
+        writer = PdfWriter()
+        for j in range(start_page, end_page):
+            writer.add_page(reader.pages[j])
+            
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            writer.write(tmp.name)
+            tmp_name = tmp.name
+
+        try:
+            print("  🔼 Uploading chunk to Gemini AI...")
+            sample_file = genai.upload_file(path=tmp_name, mime_type="application/pdf")
+            
+            print("  ⚙️  Extracting questions...")
+            response = model.generate_content([sample_file, prompt])
+            raw_json = response.text.strip()
+            
+            if raw_json.startswith("```json"):
+                raw_json = raw_json[7:]
+            if raw_json.endswith("```"):
+                raw_json = raw_json[:-3]
+            raw_json = raw_json.strip()
+            
+            questions = json.loads(raw_json)
+            print(f"  ✅ Extracted {len(questions)} questions from this chunk.")
+            all_questions.extend(questions)
+            
+            # Clean up Gemini file to save quota
+            genai.delete_file(sample_file.name)
+            
+        except json.JSONDecodeError as de:
+            print(f"  ❌ Failed to parse JSON from this chunk: {de}")
+            print(raw_json[:200] + "...") 
+        except Exception as e:
+            print(f"  ❌ Error communicating with Gemini for this chunk: {e}")
+        finally:
+            if os.path.exists(tmp_name):
+                os.remove(tmp_name)
+                
+        # To avoid hitting the 15 RPM free-tier quota, pause briefly between chunks
+        time.sleep(4)
+                
+    # Deduplicate by question number (in case a question spans a chunk boundary and got extracted twice)
+    print(f"\nFinished. Deduplicating {len(all_questions)} extracted questions...")
+    unique_questions = {}
+    for q in all_questions:
+        num = q.get("number")
+        # Keep the version of the question with the longer text (more complete)
+        if num in unique_questions:
+            if len(q.get("question", "")) > len(unique_questions[num].get("question", "")):
+                unique_questions[num] = q
+        else:
+            unique_questions[num] = q
+            
+    final_list = list(unique_questions.values())
+    return final_list
         
         
 def _store(questions: list) -> int:
