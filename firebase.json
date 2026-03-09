@@ -1,15 +1,13 @@
 {
   "hosting": {
+    "site": "examifycloud",
     "public": "frontend",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
     "rewrites": [
-      {
-        "source": "/api/**",
-        "run": {
-          "serviceId": "certiq-api",
-          "region": "asia-south1"
-        }
-      },
       {
         "source": "**",
         "destination": "/index.html"
