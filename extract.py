@@ -1,24 +1,19 @@
-"""
-Cloud Function entry point — triggered when a file is uploaded to GCS bucket.
-Branch: extraction
-Deploy: gcloud functions deploy certiq-extraction (see deploy-extraction.sh)
-"""
-
 import os
 import csv
 import json
-import tempfile
+import argparse
 import google.generativeai as genai
 from pymongo import MongoClient
-from google.cloud import storage
+from dotenv import load_dotenv
 
-# ── Config from env vars set in Cloud Function ─────────────────
-MONGO_URI   = os.environ.get("MONGO_URI", "")
-DB_NAME     = os.environ.get("DB_NAME", "QuizApp")
-COLLECTION  = os.environ.get("QUESTIONS_COLLECTION", "questions")
-GEMINI_KEY  = os.environ.get("GEMINI_API_KEY", "")
+# Load local environment variables from .env file
+load_dotenv()
 
-# Global client for warm-start reuse
+MONGO_URI = os.environ.get("QUIZAPP_MONGO_URI", "")
+DB_NAME = os.environ.get("DB_NAME", "QuizApp")
+COLLECTION = os.environ.get("QUESTIONS_COLLECTION", "questions")
+GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
+
 mongo_client = None
 if MONGO_URI:
     mongo_client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=30_000, tls=True)
@@ -26,48 +21,26 @@ if MONGO_URI:
 if GEMINI_KEY:
     genai.configure(api_key=GEMINI_KEY)
 
-def run_extraction(event_payload, context=None):
-    """
-    GCS trigger entry point.
-    Fires on 'google.cloud.storage.object.v1.finalized' event.
-    """
-    # Functions Framework sometimes passes a raw dict (legacy) or a CloudEvent object
-    if isinstance(event_payload, dict):
-        data = event_payload
-    else:
-        data = event_payload.data
-        if isinstance(data, bytes):
-            data = json.loads(data)
+def run_extraction(file_path):
+    if not os.path.exists(file_path):
+        print(f"❌ File not found: {file_path}")
+        return
 
-    bucket_name = data.get("bucket", "")
-    file_name   = data.get("name", "")
-
-    # Check extension
+    file_name = os.path.basename(file_path)
     is_pdf = file_name.lower().endswith(".pdf")
     is_csv = file_name.lower().endswith(".csv")
 
     if not is_pdf and not is_csv:
-        print(f"Skipping unsupported file format: {file_name}")
+        print(f"❌ Unsupported file format: {file_name}. Only .pdf and .csv are supported.")
         return
 
-    print(f"📄 New file uploaded: gs://{bucket_name}/{file_name}")
+    print(f"📄 Processing local file: {file_path}")
 
-    # 1. Download file to /tmp
-    storage_client = storage.Client()
-    bucket         = storage_client.bucket(bucket_name)
-    blob           = bucket.blob(file_name)
-
-    ext = ".pdf" if is_pdf else ".csv"
-    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
-        tmp_path = tmp.name
-        blob.download_to_filename(tmp_path)
-        print(f"⬇️  Downloaded to {tmp_path}")
-
-    # 2. Extract and Parse
+    # Extract and Parse
     if is_pdf:
-        questions = _process_pdf_gemini(tmp_path)
+        questions = _process_pdf_gemini(file_path)
     else:
-        questions = _process_csv(tmp_path)
+        questions = _process_csv(file_path)
 
     print(f"📋 Parsed {len(questions)} questions from '{file_name}'")
 
@@ -75,15 +48,15 @@ def run_extraction(event_payload, context=None):
         print("❌ No questions found or a parsing error occurred.")
         return
 
-    # 3. Store in MongoDB
+    # Store in MongoDB
     stored = _store(questions)
     print(f"✅ Done — {stored} documents inserted/updated in MongoDB '{DB_NAME}.{COLLECTION}'")
 
 
-def _process_csv(tmp_path):
+def _process_csv(file_path):
     print("Parsing CSV...")
     questions = []
-    with open(tmp_path, mode='r', encoding='utf-8') as f:
+    with open(file_path, mode='r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
         for idx, row in enumerate(reader):
             try:
@@ -95,14 +68,10 @@ def _process_csv(tmp_path):
                 if "Option E" in row and row["Option E"].strip(): options["E"] = row["Option E"].strip()
                 if "Option F" in row and row["Option F"].strip(): options["F"] = row["Option F"].strip()
 
-                # Handle multi-select like "B, C, D" gracefully
                 correct_raw = row.get("Correct Answer", "A")
                 correct_list = [ans.strip().upper() for ans in correct_raw.split(",")]
-                
-                # If only 1 correct answer, leave as a string. If multiple, store as an Array of strings.
                 final_correct = correct_list if len(correct_list) > 1 else correct_list[0]
 
-                # Ensure minimum fields
                 number = row.get("Number", idx + 1)
                 try: 
                     number = int(number)
@@ -116,7 +85,7 @@ def _process_csv(tmp_path):
                     "correct_ans": final_correct,
                     "explanation": row.get("Explanation", "").strip(),
                     "topic": row.get("Topic", "General").strip(),
-                    "certification_name": row.get("Certification", "gcp-pde").strip()
+                    "certification_name": row.get("Certification", "UNKNOWN").strip()
                 })
             except Exception as e:
                 print(f"⚠️ Error parsing row {idx}: {e}")
@@ -124,14 +93,14 @@ def _process_csv(tmp_path):
     return questions
 
 
-def _process_pdf_gemini(tmp_path):
+def _process_pdf_gemini(file_path):
     if not GEMINI_KEY:
-        print("❌ GEMINI_API_KEY environment variable is not set! Cannot process PDF.")
+        print("❌ GEMINI_API_KEY environment variable is not set! Check your .env file.")
         return []
 
     print("Uploading PDF to Gemini AI...")
     try:
-        sample_file = genai.upload_file(path=tmp_path, mime_type="application/pdf")
+        sample_file = genai.upload_file(path=file_path, mime_type="application/pdf")
     except Exception as e:
         print(f"❌ Failed to upload PDF to Gemini: {e}")
         return []
@@ -157,15 +126,15 @@ def _process_pdf_gemini(tmp_path):
     - Ensure EVERY single question in the document is extracted.
     '''
     
-    print("Generating question data with Gemini-2.0-flash (High Token Output)...")
+    print("Generating question data with Gemini-flash-latest...")
     
     generation_config = {
-        "max_output_tokens": 8192,  # Maximum standard output
+        "max_output_tokens": 8192,
         "response_mime_type": "application/json",
     }
     
     model = genai.GenerativeModel(
-        model_name='gemini-2.0-flash',
+        model_name='gemini-flash-latest',
         generation_config=generation_config
     )
     
@@ -173,7 +142,6 @@ def _process_pdf_gemini(tmp_path):
         response = model.generate_content([sample_file, prompt])
         raw_json = response.text.strip()
         
-        # Clean markdown if generated
         if raw_json.startswith("```json"):
             raw_json = raw_json[7:]
         if raw_json.endswith("```"):
@@ -184,7 +152,7 @@ def _process_pdf_gemini(tmp_path):
         return questions
     except json.JSONDecodeError as de:
         print(f"❌ Failed to parse JSON from Gemini response: {de}")
-        print(raw_json[:500] + "...") # Print snippet for debugging
+        print(raw_json[:500] + "...") 
         return []
     except Exception as e:
         print(f"❌ Error communicating with Gemini: {e}")
@@ -194,14 +162,11 @@ def _process_pdf_gemini(tmp_path):
 def _store(questions: list) -> int:
     global mongo_client
     if not MONGO_URI or not mongo_client:
-        print("❌ MONGO_URI environment variable is not set or client failed to initialize!")
+        print("❌ QUIZAPP_MONGO_URI environment variable is not set or client failed to initialize! Check your .env file.")
         return 0
         
     col = mongo_client[DB_NAME][COLLECTION]
     
-    # We will simply append these questions to the database for this project iteration
-    # rather than wiping the DB completely like the original script did, 
-    # so we can support uploading multiple overlapping cert PDFs/CSVs over time.
     if questions:
         col.insert_many(questions)
         col.create_index("number", background=True)
@@ -209,3 +174,10 @@ def _store(questions: list) -> int:
         col.create_index("certification_name", background=True)
         
     return len(questions)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Extract questions from a PDF or CSV and push to MongoDB.")
+    parser.add_argument("file_path", help="Path to the .pdf or .csv file")
+    args = parser.parse_args()
+    
+    run_extraction(args.file_path)
