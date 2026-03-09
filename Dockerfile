@@ -8,7 +8,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy app files
 COPY main.py models.py ./
-COPY frontend/ ./frontend/
 
 # Cloud Run expects port 8080
 EXPOSE 8080
