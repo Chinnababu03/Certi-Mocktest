@@ -27,7 +27,8 @@ DB_NAME   = os.getenv("DB_NAME",   "QuizApp")
 Q_COL     = os.getenv("QUESTIONS_COLLECTION", "questions")
 R_COL     = os.getenv("RESULTS_COLLECTION",   "quiz_results")
 
-client       = MongoClient(MONGO_URI, serverSelectionTimeoutMS=30_000, tls=True)
+import certifi
+client       = MongoClient(MONGO_URI, serverSelectionTimeoutMS=30_000, tls=True, tlsCAFile=certifi.where())
 db           = client[DB_NAME]
 questions_col = db[Q_COL]
 results_col   = db[R_COL]
@@ -88,17 +89,77 @@ def list_questions(
     }
 
 
+@app.get("/api/metadata", tags=["Meta"])
+def get_metadata():
+    """
+    Returns available certifications, their topics, and problem counts.
+    Used to populate frontend dropdowns.
+    """
+    pipeline = [
+        {
+            "$group": {
+                "_id": {
+                    "cert": "$certification_name",
+                    "topic": "$topic"
+                },
+                "count": {"$sum": 1}
+            }
+        },
+        {
+            "$group": {
+                "_id": "$_id.cert",
+                "topics": {
+                    "$push": {
+                        "topic": "$_id.topic",
+                        "count": "$count"
+                    }
+                },
+                "total_count": {"$sum": "$count"}
+            }
+        },
+        {
+            "$project": {
+                "_id": 0,
+                "certification_name": "$_id",
+                "topics": 1,
+                "total_count": 1
+            }
+        },
+        {"$sort": {"certification_name": 1}}
+    ]
+    
+    metadata = list(questions_col.aggregate(pipeline))
+    return {"metadata": metadata}
+
+
 @app.get("/api/quiz", tags=["Quiz"])
-def get_quiz(count: int = Query(10, ge=1, le=100)):
+def get_quiz(
+    count: int = Query(10, ge=1, le=100),
+    cert: str = Query(None, description="Filter by certification_name"),
+    topic: str = Query(None, description="Filter by topic")
+):
     """
     Return `count` random questions for a quiz session.
     correct_ans is NOT included in the response (anti-cheat).
+    Accepts optional cert and topic filters.
     """
-    docs = list(questions_col.aggregate([{"$sample": {"size": count}}]))
+    match_stage = {}
+    if cert:
+        match_stage["certification_name"] = cert
+    if topic:
+        match_stage["topic"] = topic
+
+    pipeline = []
+    if match_stage:
+        pipeline.append({"$match": match_stage})
+        
+    pipeline.append({"$sample": {"size": count}})
+
+    docs = list(questions_col.aggregate(pipeline))
     if not docs:
         raise HTTPException(
             status_code=404,
-            detail="No questions in DB. Run extract_pdf.py first.",
+            detail="No matching questions found for the given criteria."
         )
 
     quiz_questions = [
@@ -107,6 +168,7 @@ def get_quiz(count: int = Query(10, ge=1, le=100)):
             "number":   d.get("number"),
             "question": d.get("question"),
             "options":  d.get("options", {}),
+            "topic":    d.get("topic", "General")
         }
         for d in docs
     ]
