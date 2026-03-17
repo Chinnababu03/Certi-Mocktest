@@ -207,14 +207,21 @@ body {
 }
 
 .hero-card h2 {
-  font-size: 22px;
-  font-weight: 800;
-  letter-spacing: -0.5px;
+  font-size: 28px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  background: linear-gradient(135deg, #c7d2fe, #818cf8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .hero-card p {
+  font-size: 12px;
   color: var(--text-muted);
-  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  margin-top: 2px;
   line-height: 1.7;
 }
 
@@ -527,11 +534,12 @@ select option {
    QUIZ SCREEN
    ════════════════════════════════════════════════════════════ */
 .quiz-layout {
-  max-width: 900px;
+  max-width: 1600px;
+  width: 96%;
   margin: 0 auto;
   display: grid;
-  grid-template-columns: 240px 1fr;
-  gap: 20px;
+  grid-template-columns: 300px 1fr;
+  gap: 60px;
   align-items: start;
 }
 
@@ -548,7 +556,7 @@ select option {
   max-height: calc(100vh - 80px);
   overflow-y: auto;
   position: sticky;
-  top: 20px;
+  align-self: center;
 }
 
 .quiz-sidebar h3 {
@@ -808,9 +816,26 @@ select option {
 
 .dot-nav {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
   width: 100%;
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 4px;
+  box-sizing: border-box;
+}
+
+.dot-nav::-webkit-scrollbar {
+  width: 4px;
+}
+
+.dot-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dot-nav::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
 }
 
 .dot {
@@ -823,7 +848,7 @@ select option {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -838,7 +863,7 @@ select option {
 .dot.visited {
   background: rgba(248, 113, 113, 0.15);
   /* Red tint */
-  border-color: rgba(248, 113, 113, 0.4);
+  border-color: rgba(248, 113, 113, 0.5);
   color: var(--error);
 }
 
@@ -1030,23 +1055,54 @@ select option {
   gap: 10px;
 }
 
-.breakdown-item {
-  border-radius: var(--radius);
-  padding: 16px 18px;
-  border: 1px solid var(--border);
-  background: var(--surface);
+.breakdown-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.q-box {
+  aspect-ratio: 1;
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  transition: all var(--transition);
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 16px;
+  border-radius: 12px;
+  cursor: pointer;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  transition: transform 0.2s, box-shadow 0.2s;
+  color: var(--text);
 }
 
-.breakdown-item.correct-item {
-  border-color: rgba(34, 211, 165, 0.2);
+.q-box:hover {
+  transform: translateY(-2px);
 }
 
-.breakdown-item.wrong-item {
-  border-color: rgba(248, 113, 113, 0.2);
+.q-box-correct {
+  background: rgba(34, 211, 165, 0.15);
+  color: #22d3a5;
+  border-color: rgba(34, 211, 165, 0.4);
+}
+
+.q-box-correct:hover {
+  box-shadow: 0 4px 12px rgba(34, 211, 165, 0.2);
+}
+
+.q-box-wrong {
+  background: rgba(248, 113, 113, 0.15);
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.4);
+}
+
+.q-box-wrong:hover {
+  box-shadow: 0 4px 12px rgba(248, 113, 113, 0.2);
+}
+
+.breakdown-item.wrong-border {
+  border: 1px solid rgba(248, 113, 113, 0.6);
 }
 
 .bi-header {
@@ -1072,16 +1128,26 @@ select option {
   white-space: nowrap;
 }
 
-.bi-badge.c {
+.bi-badge-c {
   background: var(--success-bg);
   color: var(--success);
   border: 1px solid rgba(34, 211, 165, 0.2);
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 99px;
+  font-weight: bold;
+  font-size: 11px;
 }
 
-.bi-badge.w {
+.bi-badge-w {
   background: var(--error-bg);
   color: var(--error);
   border: 1px solid rgba(248, 113, 113, 0.2);
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 99px;
+  font-weight: bold;
+  font-size: 11px;
 }
 
 .bi-answers {
@@ -1164,6 +1230,8 @@ select option {
   width: 100%;
   text-align: center;
   padding: 32px 24px;
+  max-height: 80vh;
+  overflow-y: auto;
 }
 
 .modal h3 {

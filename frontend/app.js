@@ -3,7 +3,7 @@
  * Communicates with FastAPI backend at /api/*
  */
 
-const API = 'https://certiq-api-502816012135.asia-south1.run.app';  // Cloud Run API
+const API = 'https://certiq-api-4p3puslswa-el.a.run.app';  // Stable Cloud Run API hash URL
 
 // ── State ──────────────────────────────────────────────────────
 const state = {
@@ -57,51 +57,91 @@ function setupSlider() {
 }
 
 async function loadStats() {
-  try {
-    const res = await fetch(`${API}/api/health`);
-    const data = await res.json();
-    animateNumber('stat-total', data.total_questions || 0);
-    document.getElementById('stat-taken').textContent = state.totalQuizzesTaken;
-  } catch {
-    document.getElementById('stat-total').textContent = '–';
-  }
+  document.getElementById('stat-total').textContent = '0';
+  document.getElementById('stat-topics').textContent = '0';
+  document.getElementById('stat-taken').textContent = state.totalQuizzesTaken;
 }
+
+let metadataCache = [];
 
 async function loadCategories() {
   try {
-    const res = await fetch(`${API}/api/categories`);
+    const res = await fetch(`${API}/api/metadata`);
     const data = await res.json();
-    state.categories = data.categories || [];
+    metadataCache = data.metadata || [];
 
-    animateNumber('stat-topics', state.categories.length);
+    // Populate Certification Dropdown
+    const certSel = document.getElementById('cert-select');
+    certSel.innerHTML = '<option value="" selected disabled>Select a Certification</option>';
 
-    // Populate select
-    const sel = document.getElementById('topic-select');
-    state.categories.forEach(cat => {
+    metadataCache.forEach(certData => {
       const opt = document.createElement('option');
-      opt.value = cat.topic; opt.textContent = `${cat.topic} (${cat.count})`;
-      sel.appendChild(opt);
+      opt.value = certData.certification_name;
+      opt.textContent = certData.certification_name.toUpperCase();
+      certSel.appendChild(opt);
     });
 
-    // Render category grid
-    renderCategoryGrid();
-  } catch {
+    certSel.disabled = false;
+
+    // Event listener to change topics when cert changes
+    certSel.addEventListener('change', updateTopicDropdown);
+
+    // Initial population of topics
+    updateTopicDropdown();
+  } catch (e) {
+    console.error(e);
     document.getElementById('stat-topics').textContent = '–';
     document.getElementById('category-grid').innerHTML =
-      '<p style="color:var(--text-muted);font-size:13px;grid-column:1/-1">Could not load categories.</p>';
+      '<p style="color:var(--text-muted);font-size:13px;grid-column:1/-1">Could not load metadata.</p>';
   }
 }
 
-function renderCategoryGrid() {
+function updateTopicDropdown() {
+  const certName = document.getElementById('cert-select').value;
+  const topicSel = document.getElementById('topic-select');
+  topicSel.innerHTML = '<option value="">All Topics in Cert</option>';
+
+  if (!certName) {
+    document.getElementById('stat-total').textContent = '0';
+    document.getElementById('stat-topics').textContent = '0';
+    renderCategoryGrid(null);
+    return;
+  }
+
+  const certData = metadataCache.find(c => c.certification_name === certName);
+  if (!certData) return;
+
+  if (typeof animateNumber === 'function') {
+    animateNumber('stat-total', certData.total_count);
+    animateNumber('stat-topics', certData.topics.length);
+  } else {
+    document.getElementById('stat-total').textContent = certData.total_count;
+    document.getElementById('stat-topics').textContent = certData.topics.length;
+  }
+
+  // Sort topics by question count (descending)
+  certData.topics.sort((a, b) => b.count - a.count);
+
+  certData.topics.forEach(t => {
+    const opt = document.createElement('option');
+    opt.value = t.topic;
+    opt.textContent = `${t.topic} (${t.count})`;
+    topicSel.appendChild(opt);
+  });
+
+  renderCategoryGrid(certData);
+}
+
+function renderCategoryGrid(certData) {
   const grid = document.getElementById('category-grid');
-  if (!state.categories.length) { grid.innerHTML = ''; return; }
+  if (!certData || !certData.topics.length) { grid.innerHTML = ''; return; }
 
   const colors = ['#6366f1', '#8b5cf6', '#22d3a5', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#10b981'];
-  grid.innerHTML = state.categories.map((cat, i) => `
-    <div class="category-chip" onclick="quickStartByTopic('${escHtml(cat.topic)}')">
+  grid.innerHTML = certData.topics.map((t, i) => `
+    <div class="category-chip" onclick="quickStartByTopic('${escHtml(t.topic)}')">
       <div class="cc-dot" style="background:${colors[i % colors.length]}"></div>
-      <div class="cc-name">${escHtml(cat.topic)}</div>
-      <div class="cc-count">${cat.count} questions</div>
+      <div class="cc-name">${escHtml(t.topic)}</div>
+      <div class="cc-count">${t.count} questions</div>
     </div>`).join('');
 }
 
@@ -228,10 +268,12 @@ function renderQuestion() {
   // Nav dots
   renderDots();
 
-  // Buttons
-  document.getElementById('btn-prev').disabled = idx === 0;
+  // Buttons visibility
+  const prevBtn = document.getElementById('btn-prev');
   const nextBtn = document.getElementById('btn-next');
   const submitBtn = document.getElementById('btn-submit');
+
+  prevBtn.disabled = (idx === 0);
 
   if (idx === total - 1) {
     nextBtn.style.display = 'none';
@@ -279,11 +321,6 @@ function selectOption(questionId, key) {
     else b.classList.remove('selected');
   });
 
-  // If this is the last question, show the submit button if answered
-  if (state.currentIndex === state.questions.length - 1) {
-    document.getElementById('btn-submit').style.display = arr.length > 0 ? 'flex' : 'none';
-  }
-
   renderDots();
 }
 
@@ -307,31 +344,35 @@ function prevQuestion() {
 }
 
 // ── Submit Quiz ────────────────────────────────────────────────
-async function submitQuiz(autoSubmit = false) {
+window.submitQuiz = async function (autoSubmit = false) {
   const unanswered = state.questions.filter(q => !state.userAnswers[q._id] || state.userAnswers[q._id].length === 0);
+
   if (!autoSubmit && unanswered.length > 0) {
-    const proceed = confirm(`You have ${unanswered.length} unanswered question(s). Submit anyway?`);
-    if (!proceed) return;
+    openSubmitModal(unanswered.length);
+    return;
   }
 
   stopTimer();
   const timeTakenSecs = (state.questions.length * 144) - state.timeLeft;
   const timeTaken = formatTime(timeTakenSecs);
 
-  const answers = Object.entries(state.userAnswers).map(([qid, arr]) => ({
-    question_id: qid,
-    selected_answer: arr.join(',')
-  }));
-
-  // Also include unanswered as empty
-  state.questions.forEach(q => {
-    if (!state.userAnswers[q._id] || state.userAnswers[q._id].length === 0) {
-      answers.push({ question_id: q._id, selected_answer: '' });
-    }
+  // Generate payload correctly without duplicates
+  const answers = state.questions.map(q => {
+    const selected = state.userAnswers[q._id] || [];
+    return {
+      question_id: q._id,
+      selected_answer: selected.join(',')
+    };
   });
 
+  if (!state.sessionId || !state.questions.length) {
+    showToast('⚠️ Session error. Please restart the quiz.');
+    return;
+  }
+
   document.getElementById('btn-submit').disabled = true;
-  document.getElementById('btn-submit').textContent = 'Submitting…';
+  document.getElementById('btn-submit').textContent = 'Submitting...';
+  console.log('Submitting quiz...', { session_id: state.sessionId, count: answers.length });
 
   try {
     const res = await fetch(`${API}/api/submit`, {
@@ -349,7 +390,8 @@ async function submitQuiz(autoSubmit = false) {
 
     showResults(result, timeTaken);
   } catch (err) {
-    showToast('⚠️ Submission failed. Check server connection.');
+    console.error('Quiz Submission Error:', err);
+    showToast(`⚠️ Submission failed: ${err.message || 'Check connection'}`);
     document.getElementById('btn-submit').disabled = false;
     document.getElementById('btn-submit').textContent = 'Submit Quiz';
   }
@@ -360,6 +402,7 @@ async function submitQuiz(autoSubmit = false) {
 // ══════════════════════════════════════════════════════════════
 function showResults(result, timeTaken) {
   const { score, total, percentage, details } = result;
+  window.currentQuizDetails = details; // Cache for modal
 
   // Badge + title
   let badge = '🎉', title = 'Excellent Work!', subtitle = 'Outstanding performance!';
@@ -392,19 +435,12 @@ function showResults(result, timeTaken) {
 
   // Breakdown
   const list = document.getElementById('breakdown-list');
-  list.innerHTML = details.map((d, i) => `
-    <div class="breakdown-item ${d.is_correct ? 'correct-item' : 'wrong-item'}">
-      <div class="bi-header">
-        <p class="bi-q"><strong>Q${i + 1}.</strong> ${escHtml(d.question)}</p>
-        <span class="bi-badge ${d.is_correct ? 'c' : 'w'}">${d.is_correct ? '✓ Correct' : '✗ Wrong'}</span>
-      </div>
-      <div class="bi-answers">
-        ${!d.is_correct ? `<span class="bi-your">Your answer: <span>${d.selected_answer || 'Skipped'}</span></span>` : ''}
-        <span class="bi-correct-lbl">Correct: <span>${d.correct_answer}</span></span>
-      </div>
-      ${d.explanation ? `<p class="bi-explanation">${escHtml(d.explanation)}</p>` : ''}
-      <span class="bi-topic">${escHtml(d.topic || 'General')}</span>
-    </div>`).join('');
+  list.className = 'breakdown-grid'; // Use grid layout
+  list.innerHTML = details.map((d, i) => {
+    const isCorrect = d.is_correct;
+    const boxClass = isCorrect ? 'q-box-correct' : 'q-box-wrong';
+    return `<div class="q-box ${boxClass}" onclick="openExplanation(${i})">Q${i + 1}</div>`;
+  }).join('');
 
   showScreen('results');
 }
@@ -478,7 +514,74 @@ function closeModal() {
   document.getElementById('exit-modal').style.display = 'none';
 }
 document.getElementById('exit-modal').addEventListener('click', (e) => {
-  if (e.target === e.currentTarget) closeModal();
+  if (e.target === document.getElementById('exit-modal')) {
+    closeModal();
+  }
+});
+
+// ── Submit Modal ───────────────────────────────────────────────
+window.openSubmitModal = function (count) {
+  document.getElementById('submit-modal-text').textContent = `You have ${count} unanswered question(s). Submit anyway?`;
+  document.getElementById('submit-modal').style.display = 'flex';
+};
+window.closeSubmitModal = function () {
+  document.getElementById('submit-modal').style.display = 'none';
+};
+window.confirmSubmit = function () {
+  closeSubmitModal();
+  submitQuiz(true);
+};
+document.getElementById('submit-modal').addEventListener('click', (e) => {
+  if (e.target === document.getElementById('submit-modal')) {
+    closeSubmitModal();
+  }
+});
+
+// ── Explanation Modal ──────────────────────────────────────────
+window.openExplanation = function (index) {
+  const d = window.currentQuizDetails[index];
+  const isCorrect = d.is_correct;
+
+  let html = `
+    <div style="margin-bottom: 20px;">
+      <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
+        <strong style="color: var(--text); font-size: 16px;">Question ${index + 1}:</strong>
+        <span style="font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--accent-light); background: rgba(99, 102, 241, 0.12); padding: 4px 10px; border-radius: 99px; border: 1px solid rgba(99, 102, 241, 0.2);">${escHtml(d.topic || 'General')}</span>
+      </div>
+      <span style="color: var(--text-muted); line-height: 1.6;">${escHtml(d.question)}</span>
+    </div>
+    <div style="margin-bottom: 20px; padding: 12px; border-radius: 8px; background: rgba(255,255,255,0.03); border: 1px solid var(--border);">
+      <div style="margin-bottom: 8px;">
+        <span style="color: var(--text-muted);">Your answer:</span> 
+        <span style="font-weight: 700; color: ${isCorrect ? '#22d3a5' : '#f87171'};">${d.selected_answer || 'Skipped'}</span>
+      </div>
+      <div>
+        <span style="color: var(--text-muted);">Correct answer:</span> 
+        <span style="font-weight: 700; color: #22d3a5;">${d.correct_answer}</span>
+      </div>
+    </div>
+    <div>
+      <strong style="color: #22d3a5; display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>
+        Explanation
+      </strong>
+      <div style="color: var(--text-muted); line-height: 1.6; font-size: 14px;">
+        ${d.explanation ? escHtml(d.explanation) : 'No explanation available.'}
+      </div>
+    </div>
+  `;
+
+  document.getElementById('explanation-text').innerHTML = html;
+  document.getElementById('explanation-modal').style.display = 'flex';
+};
+
+window.closeExplanationModal = function () {
+  document.getElementById('explanation-modal').style.display = 'none';
+};
+document.getElementById('explanation-modal').addEventListener('click', (e) => {
+  if (e.target === document.getElementById('explanation-modal')) {
+    closeExplanationModal();
+  }
 });
 
 // ── Toast ──────────────────────────────────────────────────────
