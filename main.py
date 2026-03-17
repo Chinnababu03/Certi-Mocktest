@@ -208,9 +208,16 @@ def submit_quiz(submission: QuizSubmission):
         if not doc:
             continue
 
-        correct    = doc.get("correct_ans", "")
-        selected   = (ans.selected_answer or "").upper()
-        is_correct = selected == correct.upper()
+        correct_raw = doc.get("correct_ans") or ""
+        if isinstance(correct_raw, list):
+            correct_list = sorted([str(c).upper() for c in correct_raw])
+        else:
+            correct_list = sorted([c.strip().upper() for c in str(correct_raw).split(',') if c.strip()])
+
+        selected_raw = ans.selected_answer or ""
+        selected_list = sorted([s.strip().upper() for s in selected_raw.split(',') if s.strip()])
+
+        is_correct = (selected_list == correct_list) and len(correct_list) > 0
         if is_correct:
             score += 1
 
@@ -219,8 +226,8 @@ def submit_quiz(submission: QuizSubmission):
             "number":          doc.get("number"),
             "question":        doc.get("question"),
             "options":         doc.get("options", {}),
-            "selected_answer": selected,
-            "correct_answer":  correct,
+            "selected_answer": selected_raw, 
+            "correct_answer":  ",".join(correct_list) if isinstance(correct_raw, list) else str(correct_raw),
             "is_correct":      is_correct,
             "explanation":     doc.get("explanation", ""),
         })
