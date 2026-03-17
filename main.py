@@ -190,15 +190,21 @@ def submit_quiz(submission: QuizSubmission):
     if not submission.answers:
         raise HTTPException(status_code=400, detail="No answers provided.")
 
+    # 1. Bulk lookup all questions at once
+    try:
+        q_ids = [ObjectId(a.question_id) for a in submission.answers]
+    except Exception:
+        # If any ID is malformed, we'll fall back to safer loop or just fail for those
+        q_ids = []
+
+    docs_cursor = questions_col.find({"_id": {"$in": q_ids}})
+    docs_dict   = {str(d["_id"]): d for d in docs_cursor}
+
     details = []
     score   = 0
 
     for ans in submission.answers:
-        # Lookup question by _id
-        try:
-            doc = questions_col.find_one({"_id": ObjectId(ans.question_id)})
-        except Exception:
-            continue
+        doc = docs_dict.get(ans.question_id)
         if not doc:
             continue
 
